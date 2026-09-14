@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11Pay NEWS 管理画面</title>
+  <style>
+    body { font-family: sans-serif; background: #f5f5f5; padding: 20px; margin: 0; }
+    .container { max-width: 400px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h2 { font-size: 18px; color: #333; margin-top: 0; }
+    label { font-size: 13px; font-weight: bold; color: #555; display: block; margin-top: 10px; }
+    input, textarea { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+    textarea { height: 100px; resize: vertical; }
+    button { background: #e65100; color: #fff; border: none; width: 100%; padding: 12px; margin-top: 20px; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; }
+    button:hover { background: #d84315; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>📰 11Pay ニュース投稿</h2>
+  
+  <label for="news-title">タイトル</label>
+  <input type="text" id="news-title" placeholder="例: 新しいキャンペーンのお知らせ">
+
+  <label for="news-date">日付</label>
+  <input type="date" id="news-date">
+
+  <label for="news-content">本文</label>
+  <textarea id="news-content" placeholder="詳細な内容を入力してください..."></textarea>
+
+  <button id="submit-btn" onclick="addNewsToGitHub()">11Payに追加する</button>
+</div>
+
+<script>
+  // 本日の日付をデフォルトセット
+  document.getElementById('news-date').valueAsDate = new Date();
+
+  // --- 🛠️ ここをご自身のGitHub情報に書き換えてください ---
+  const GITHUB_USERNAME = "あなたのGitHubユーザー名"; 
+  const REPOSITORY_NAME = "11pay"; // 11Payのリポジトリ名
+  const GITHUB_TOKEN = "ここにステップ2で取得したアクセストークンを貼り付け"; 
+  const FILE_PATH = "news.json"; // 11Pay側のニュースデータファイル名
+  // ----------------------------------------------------
+
+  async function addNewsToGitHub() {
+    const title = document.getElementById('news-title').value.trim();
+    const date = document.getElementById('news-date').value;
+    const content = document.getElementById('news-content').value.trim();
+
+    if (!title || !date || !content) {
+      alert("すべての項目を入力してください！");
+      return;
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerText = "追加中...";
+
+    const apiUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${REPOSITORY_NAME}/contents/${FILE_PATH}`;
+
+    try {
+      // 1. 現在の news.json の中身と sha（ファイルのバージョン管理番号）を取得
+      const getRes = await fetch(apiUrl, {
+        headers: {
+          "Authorization": `token ${GITHUB_TOKEN}`,
+          "Accept": "application/vnd.github.v3+json"
+        }
+      });
+
+      if (!getRes.ok) throw new Error("GitHubからのデータ取得に失敗しました。トークンやリポジトリ名を確認してください。");
+      
+      const fileData = await getRes.json();
+      
+      // Base64でエンコードされている既存のJSONをデコードして配列に戻す
+      const decodedContent = decodeURIComponent(escape(atob(fileData.content)));
+      let currentNewsList = JSON.parse(decodedContent);
+
+      // 2. 新しいニュースを配列の先頭に追加 (IDは現在時刻などを使用)
+      const newId = Date.now();
+      const newEntry = { id: newId, title, date, content };
+      currentNewsList.unshift(newEntry);
+
+      // 3. 再びBase64にエンコード
+      const updatedContent = btoa(unescape(encodeURIComponent(JSON.stringify(currentNewsList, null, 2))));
+
+      // 4. GitHubにファイルを上書き保存（Commit）するAPIリクエストを送る
+      const putRes = await fetch(apiUrl, {
+        method: "PUT",
+        headers: {
+          "Authorization": `token ${GITHUB_TOKEN}`,
+          "Content-Type": "application/json",
+          "Accept": "application/vnd.github.v3+json"
+        },
+        body: JSON.stringify({
+          message: `Add news: ${title}`,
+          content: updatedContent,
+          sha: fileData.sha // これがないと競合エラーになります
+        })
+      });
+
+      if (!putRes.ok) throw new Error("GitHubへの保存に失敗しました。");
+
+      alert("🎉 11Payへのニュース追加が成功しました！数分後に反映されます。");
+      
+      // フォームをクリア
+      document.getElementById('news-title').value = '';
+      document.getElementById('news-content').value = '';
+
+    } catch (error) {
+      alert("エラーが発生しました: " + error.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "11Payに追加する";
+    }
+  }
+</script>
+
+</body>
+</html>
